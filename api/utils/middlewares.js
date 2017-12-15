@@ -21,39 +21,55 @@ const authenticate = (req, res, next) => {
 };
 
 const encryptUserPW = (req, res, next) => {
-  const { password } = req.body;
+  const { username, password } = req.body;
   // https://github.com/kelektiv/node.bcrypt.js#usage
   // TODO: Fill this middleware in with the Proper password encrypting, bcrypt.hash()
+  if (!password) {
+    sendUserError('Gimme a password', res);
+    return;
+  }
   bcrypt
-    .hash(password, 10)
+    .hash(password, SaltRounds)
     .then((pw) => {
       req.password = pw;
+      const passwordHash = req.password;
+      const newUser = new User({ username, passwordHash });
+      req.user = newUser;
       next();
     })
     .catch((err) => {
       throw new Error(err);
     });
   // Once the password is encrypted using bcrypt, you'll need to save the user the DB.
-  // Once the user is set, take the savedUser and set the returned document from Mongo on req.user
+  // Once the user is set, take the savedUser and set the returned document from Mongo on 'req.user'
   // call next to head back into the route handler for encryptUserPW
 };
 
 const compareUserPW = (req, res, next) => {
-  const { password } = req.body;
+  const { username, password } = req.body;
   // https://github.com/kelektiv/node.bcrypt.js#usage
   // TODO: Fill this middleware in with the Proper password comparing, bcrypt.compare()
-  bcrypt
-  .compare(password, hashedPw)
-  .then((response) => {
-    if (!response) throw new Error();
-    req.session.username = username;
-    req.user = user;
-  })
-  .then(() => {
-    res.json({ success: true });
-  })
-  .catch((error) => {
-    return middleWare.sendUserError('some message here', res);
+  User.findOne({ username }, (err, user) => {
+    if (err || user === null) {
+      res.status(422)
+      res.json({ err: 'Cannot find such user' });
+    }
+    const hashedPw = user.password;
+    bcrypt
+      .compare(password, hashedPw)
+      .then((response) => {
+        if (!response) throw new Error();
+        else {
+          console.log('hashing success!', password, hashedPw)
+          res.json({ success: true });
+        }
+        req.username = username;
+        req.user = user;
+      })
+      .catch((error) => {
+        res.status(422)
+        res.json({ err: 'Incorrect Password' });
+      });
   });
   // You'll need to find the user in your DB
   // Once you have the user, you'll need to pass the encrypted pw and the plaintext pw to the compare function
