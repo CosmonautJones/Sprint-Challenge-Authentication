@@ -11,9 +11,11 @@ const authenticate = (req, res, next) => {
     jwt.verify(token, mysecret, (err, decoded) => {
       if (err) return res.status(422).json(err);
       req.decoded = decoded;
+      console.log('authentication fired');
       next();
     });
   } else {
+    console.log('error authenticating')
     return res.status(403).json({
       error: 'No token provided, must be set on the Authorization Header'
     });
@@ -25,16 +27,16 @@ const encryptUserPW = (req, res, next) => {
   // https://github.com/kelektiv/node.bcrypt.js#usage
   // TODO: Fill this middleware in with the Proper password encrypting, bcrypt.hash()
   if (!password) {
-    sendUserError('Gimme a password', res);
+    sendUserError('I need a password to work with', res);
     return;
   }
   bcrypt
     .hash(password, SaltRounds)
     .then((pw) => {
       req.password = pw;
-      const passwordHash = req.password;
-      const newUser = new User({ username, passwordHash });
+      const newUser = new User({ username, password: pw });
       req.user = newUser;
+      console.log(`hashing success! hashed password: ${pw}`)
       next();
     })
     .catch((err) => {
@@ -49,22 +51,26 @@ const compareUserPW = (req, res, next) => {
   const { username, password } = req.body;
   // https://github.com/kelektiv/node.bcrypt.js#usage
   // TODO: Fill this middleware in with the Proper password comparing, bcrypt.compare()
+  if (!username) {
+    res.json({ error: 'must supply a user name' })
+  }
   User.findOne({ username }, (err, user) => {
     if (err || user === null) {
       res.status(422)
       res.json({ err: 'Cannot find such user' });
+      return;
     }
     const hashedPw = user.password;
+    console.log(`hashing success! hashed password: ${hashedPw}`)
     bcrypt
       .compare(password, hashedPw)
       .then((response) => {
         if (!response) throw new Error();
         else {
-          console.log('hashing success!', password, hashedPw)
-          res.json({ success: true });
+          console.log('login: success!')
         }
-        req.username = username;
-        req.user = user;
+        req.username = user.username;
+        next();
       })
       .catch((error) => {
         res.status(422)
